@@ -1,9 +1,11 @@
 # Bliss Learner
 
 Rust binary that learns a personalised Mahalanobis distance matrix from
-user-provided "odd-one-out" training triplets stored in a bliss SQLite database.
-The learned matrix is used by [Bliss Mixer](https://github.com/chrober/bliss-mixer)
-to improve song similarity when dynamic weighting is enabled.
+user-provided "odd-one-out" training triplets. It reads triplet data from a
+JSON file and audio features from a bliss SQLite database, then outputs a
+learned distance matrix. The matrix is used by
+[Bliss Mixer](https://github.com/chrober/bliss-mixer)
+to improve song similarity when adaptive weighting is enabled.
 
 This is a Rust port of [bliss-metric-learning](https://github.com/Polochon-street/bliss-metric-learning)
 by Polochon-street. The core algorithm (crowd-kernel / STE triplet loss with
