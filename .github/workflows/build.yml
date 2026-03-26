@@ -1,0 +1,98 @@
+name: Build for all platforms
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  Linux_x86:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+
+    - name: Build x86
+      run: |
+        docker build -t bliss-learner-x86 - < docker/Dockerfile_x86
+        docker run --rm -v $PWD/target:/build -v $PWD:/src bliss-learner-x86
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bliss-learner-linux-x86
+        path: releases/
+
+  Linux_arm:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+
+    - name: Build ARM
+      run: |
+        docker build -t bliss-learner-arm - < docker/Dockerfile_arm
+        docker run --rm -v $PWD/target:/build -v $PWD:/src bliss-learner-arm
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bliss-learner-linux-arm
+        path: releases/
+
+  macOS:
+    runs-on: macos-15
+
+    steps:
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: stable
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Install Rust support for ARM64 & prepare environment
+      run: |
+        rustup target add x86_64-apple-darwin
+        rustup target add aarch64-apple-darwin
+        mkdir releases
+
+    - name: Build
+      run: |
+        cargo build --target=x86_64-apple-darwin --release
+        cargo build --target=aarch64-apple-darwin --release
+
+    - name: Build fat binary
+      run: |
+        lipo -create \
+          -arch x86_64 target/x86_64-apple-darwin/release/bliss-learner \
+          -arch arm64 target/aarch64-apple-darwin/release/bliss-learner \
+          -output releases/bliss-learner
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bliss-learner-mac
+        path: releases/
+
+  Windows:
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Build
+      run: |
+        cargo build --release
+        strip target/release/bliss-learner.exe
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bliss-learner-windows
+        path: target/release/bliss-learner.exe
