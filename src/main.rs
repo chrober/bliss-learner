@@ -2,7 +2,7 @@
 /// bliss-learner — Metric learning for bliss-mixer
 ///
 /// Learns a Mahalanobis distance matrix from user-provided "odd-one-out"
-/// training triplets stored in bliss.db.
+/// training triplets (JSON file) and bliss features (bliss.db).
 ///
 /// Based on bliss-metric-learning by Polochon-street
 /// (https://github.com/Polochon-street/bliss-metric-learning)
@@ -82,31 +82,25 @@ fn send_notif(notifs: &mut NotifInfo, text: &str) {
 
 type Triplet = [Array1<f64>; 3];
 
-fn load_triplets(db_path: &str) -> Vec<Triplet> {
+fn load_triplets(db_path: &str, triplets_path: &str) -> Vec<Triplet> {
+    let json_str = std::fs::read_to_string(triplets_path)
+        .expect("Cannot read triplets file");
+    let raw: Vec<Vec<i64>> = serde_json::from_str(&json_str)
+        .expect("Cannot parse triplets JSON");
+
     let conn = Connection::open(db_path).expect("Cannot open database");
     let cols = FEATURE_COLUMNS.join(", ");
-
-    let mut stmt = conn
-        .prepare("SELECT id, song_1_id, song_2_id, odd_one_out_id FROM training_triplet")
-        .expect("Cannot prepare triplet query");
-
-    let rows: Vec<(i64, i64, i64, i64)> = stmt
-        .query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
-        })
-        .expect("Cannot query triplets")
-        .filter_map(|r| r.ok())
-        .collect();
-
     let feature_sql = format!("SELECT {} FROM TracksV2 WHERE rowid = ?1", cols);
 
     let mut triplets = Vec::new();
     let mut skipped = 0u32;
 
-    for (_tid, s1, s2, s3) in &rows {
+    for entry in &raw {
+        if entry.len() != 3 { skipped += 1; continue; }
+        let (s1, s2, odd) = (entry[0], entry[1], entry[2]);
         let mut features: Vec<Array1<f64>> = Vec::with_capacity(3);
         let mut ok = true;
-        for sid in [s1, s2, s3] {
+        for sid in [s1, s2, odd] {
             match conn.query_row(&feature_sql, [sid], |row| {
                 let mut vals = vec![0.0f64; DIMENSIONS];
                 for i in 0..DIMENSIONS {
@@ -416,6 +410,7 @@ fn select_by_indices(x: &[Triplet], indices: &[usize]) -> Vec<Triplet> {
 
 fn main() {
     let mut db_path = String::new();
+    let mut triplets_path = String::new();
     let mut output_path = String::new();
     let mut lms_host = String::from("127.0.0.1");
     let mut lms_json_port: u16 = 9000;
@@ -426,6 +421,7 @@ fn main() {
         let mut ap = argparse::ArgumentParser::new();
         ap.set_description("Metric learning for bliss-mixer");
         ap.refer(&mut db_path).add_option(&["-d", "--db"], argparse::Store, "Path to bliss.db");
+        ap.refer(&mut triplets_path).add_option(&["-t", "--triplets"], argparse::Store, "Path to training_triplets.json");
         ap.refer(&mut output_path).add_option(&["-o", "--output"], argparse::Store, "Output path for learned_matrix.json");
         ap.refer(&mut lms_host).add_option(&["-L", "--lms"], argparse::Store, "LMS hostname (default: 127.0.0.1)");
         ap.refer(&mut lms_json_port).add_option(&["-J", "--json"], argparse::Store, "LMS JSON-RPC port (default: 9000)");
@@ -451,6 +447,10 @@ fn main() {
         log::error!("--db is required");
         std::process::exit(1);
     }
+    if triplets_path.is_empty() {
+        log::error!("--triplets is required");
+        std::process::exit(1);
+    }
     if output_path.is_empty() {
         log::error!("--output is required");
         std::process::exit(1);
@@ -465,7 +465,7 @@ fn main() {
 
     // --- Load triplets ---
     send_notif(&mut notifs, "Loading triplets...");
-    let triplets = load_triplets(&db_path);
+    let triplets = load_triplets(&db_path, &triplets_path);
     let n_triplets = triplets.len();
 
     if n_triplets < 5 {

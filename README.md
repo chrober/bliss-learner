@@ -26,14 +26,15 @@ Build with `cargo build --release`
 ## Usage
 
 ```
-bliss-learner --db /path/to/bliss.db --output /path/to/learned_matrix.json
+bliss-learner --db /path/to/bliss.db --triplets /path/to/training_triplets.json --output /path/to/learned_matrix.json
 ```
 
 ### Options
 
 | Flag | Description |
 |------|-------------|
-| `-d`, `--db` | Path to bliss.db |
+| `-d`, `--db` | Path to bliss.db (analysis features) |
+| `-t`, `--triplets` | Path to training_triplets.json (survey data) |
 | `-o`, `--output` | Output path for learned_matrix.json |
 | `-L`, `--lms` | LMS hostname (default: 127.0.0.1) |
 | `-J`, `--json` | LMS JSON-RPC port (default: 9000) |
