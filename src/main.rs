@@ -85,23 +85,22 @@ type Triplet = [Array1<f64>; 3];
 fn load_triplets(db_path: &str, triplets_path: &str) -> Vec<Triplet> {
     let json_str = std::fs::read_to_string(triplets_path)
         .expect("Cannot read triplets file");
-    let raw: Vec<Vec<i64>> = serde_json::from_str(&json_str)
+    let raw: Vec<Vec<String>> = serde_json::from_str(&json_str)
         .expect("Cannot parse triplets JSON");
 
     let conn = Connection::open(db_path).expect("Cannot open database");
     let cols = FEATURE_COLUMNS.join(", ");
-    let feature_sql = format!("SELECT {} FROM TracksV2 WHERE rowid = ?1", cols);
+    let feature_sql = format!("SELECT {} FROM TracksV2 WHERE File = ?1", cols);
 
     let mut triplets = Vec::new();
     let mut skipped = 0u32;
 
     for entry in &raw {
         if entry.len() != 3 { skipped += 1; continue; }
-        let (s1, s2, odd) = (entry[0], entry[1], entry[2]);
         let mut features: Vec<Array1<f64>> = Vec::with_capacity(3);
         let mut ok = true;
-        for sid in [s1, s2, odd] {
-            match conn.query_row(&feature_sql, [sid], |row| {
+        for file in entry {
+            match conn.query_row(&feature_sql, [file], |row| {
                 let mut vals = vec![0.0f64; DIMENSIONS];
                 for i in 0..DIMENSIONS {
                     vals[i] = row.get(i)?;
