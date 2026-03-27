@@ -506,6 +506,9 @@ fn main() {
         send_notif(&mut notifs, &format!("CV fold {}/{}", fold_idx + 1, n_splits));
 
         for (i, &lambda) in LAMBDAS.iter().enumerate() {
+            send_notif(&mut notifs, &format!(
+                "CV fold {}/{}, lambda {}/{}", fold_idx + 1, n_splits, i + 1, LAMBDAS.len()
+            ));
             let l = optimize(&l0, &x_train, SIGMA, lambda);
             let accuracy = percentage_preserved_distances(&l, &x_test);
             accuracies[i].push(accuracy);
