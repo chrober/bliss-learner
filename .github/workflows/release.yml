@@ -1,0 +1,198 @@
+name: Publish bliss-learner binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version. Empty reads Cargo.toml package.version."
+        required: false
+        default: ""
+      prerelease:
+        description: "Mark the GitHub release as prerelease."
+        type: boolean
+        required: true
+        default: false
+      dry_run:
+        description: "Build and upload workflow artifacts only; do not create a GitHub release."
+        type: boolean
+        required: true
+        default: false
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Derive and validate release metadata
+        id: meta
+        env:
+          VERSION_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
+        run: |
+          set -euo pipefail
+          cargo_version="$(python -c 'import pathlib,tomllib; print(tomllib.loads(pathlib.Path("Cargo.toml").read_text(encoding="utf-8"))["package"]["version"])')"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="$GITHUB_REF_NAME"
+            version="${tag#v}"
+          else
+            version="${VERSION_INPUT#v}"
+            version="${version:-$cargo_version}"
+            tag="v$version"
+          fi
+          if [ "$version" != "$cargo_version" ]; then
+            echo "Requested version $version does not match Cargo.toml version $cargo_version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - run: cargo test --locked
+
+  linux-x86:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build x86_64 musl binary
+        run: |
+          set -euo pipefail
+          docker build -t bliss-learner-release-x86 - < docker/Dockerfile_x86
+          docker run --rm -v "$PWD/target:/build" -v "$PWD:/src" bliss-learner-release-x86
+      - name: Stage release asset
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          install -m 0755 releases/bliss-learner dist/bliss-learner-x86_64-linux
+          (cd dist && sha256sum bliss-learner-x86_64-linux > bliss-learner-x86_64-linux.sha256)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bliss-learner-x86_64-linux
+          path: dist/*
+          if-no-files-found: error
+
+  linux-arm:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build ARM binaries
+        run: |
+          set -euo pipefail
+          docker build -t bliss-learner-release-arm - < docker/Dockerfile_arm
+          docker run --rm -v "$PWD/target:/build" -v "$PWD:/src" bliss-learner-release-arm
+      - name: Stage release assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          install -m 0755 releases/bin/bliss-learner-aarch64 dist/bliss-learner-aarch64-linux
+          install -m 0755 releases/bin/bliss-learner-armhf dist/bliss-learner-armhf-linux
+          (cd dist && sha256sum bliss-learner-aarch64-linux > bliss-learner-aarch64-linux.sha256)
+          (cd dist && sha256sum bliss-learner-armhf-linux > bliss-learner-armhf-linux.sha256)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bliss-learner-linux-arm
+          path: dist/*
+          if-no-files-found: error
+
+  macos:
+    needs: test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+      - name: Build universal binary
+        run: |
+          set -euo pipefail
+          cargo build --locked --release --target x86_64-apple-darwin
+          cargo build --locked --release --target aarch64-apple-darwin
+          mkdir -p dist
+          lipo -create \
+            -arch x86_64 target/x86_64-apple-darwin/release/bliss-learner \
+            -arch arm64 target/aarch64-apple-darwin/release/bliss-learner \
+            -output dist/bliss-learner-mac
+          chmod 0755 dist/bliss-learner-mac
+          (cd dist && shasum -a 256 bliss-learner-mac > bliss-learner-mac.sha256)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bliss-learner-mac
+          path: dist/*
+          if-no-files-found: error
+
+  windows:
+    needs: test
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Build Windows binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release
+          mkdir -p dist
+          cp target/release/bliss-learner.exe dist/bliss-learner-windows.exe
+          (cd dist && sha256sum bliss-learner-windows.exe > bliss-learner-windows.exe.sha256)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bliss-learner-windows
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: [metadata, linux-x86, linux-arm, macos, windows]
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: bliss-learner-*
+          path: release-assets
+          merge-multiple: true
+      - name: Verify checksums
+        run: (cd release-assets && sha256sum -c *.sha256)
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.metadata.outputs.tag }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/release-notes.md"
+          {
+            echo "# bliss-learner $VERSION"
+            echo
+            echo "Native metric-learning binaries for BlissMixerExt and other consumers."
+            echo
+            echo "Built from commit $GITHUB_SHA after the Rust test gate."
+          } > "$notes"
+          prerelease_flag=()
+          if [ "$PRERELEASE" = "true" ]; then
+            prerelease_flag=(--prerelease)
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            gh release create "$TAG" release-assets/* \
+              --target "$GITHUB_SHA" \
+              --title "bliss-learner $VERSION" \
+              --notes-file "$notes" \
+              "${prerelease_flag[@]}"
+          fi

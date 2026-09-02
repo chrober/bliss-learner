@@ -56,3 +56,11 @@ the crowd-kernel (STE) model described in:
 
 > Tamuz, O., Liu, C., Belongie, S., Shamir, O., & Kalai, A. T. (2011).
 > *Adaptively Learning the Crowd Kernel.* ICML.
+## Binary releases
+
+Pushing a semantic version tag such as `v0.1.0` runs
+`.github/workflows/release.yml`. The workflow tests the source, builds native
+binaries for x86_64 Linux, ARM64 Linux, ARMHF Linux, universal macOS, and
+Windows, publishes SHA-256 files, and creates or updates the GitHub Release.
+The workflow can also be started manually with `dry_run=true` to build only
+workflow artifacts.
