@@ -40,11 +40,14 @@ bliss-learner --db /path/to/bliss.db --triplets /path/to/training_triplets.json 
 | `-o`, `--output` | Output path for learned_matrix.json |
 | `-L`, `--lms` | LMS hostname (default: 127.0.0.1) |
 | `-J`, `--json` | LMS JSON-RPC port (default: 9000) |
+| `--lms-command` | LMS command prefix for notifications (default: `blissmixer`) |
 | `-N`, `--notifs` | Send progress notifications to LMS |
 | `-l`, `--logging` | Log level (default: info) |
 
 When `--notifs` is enabled, progress messages are pushed to LMS via JSON-RPC so
-the plugin settings page can display live status updates.
+the plugin settings page can display live status updates. Companion plugins can
+select their own command prefix with `--lms-command` without changing the
+default BlissMixer contract.
 
 
 ## Credits

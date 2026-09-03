@@ -46,6 +46,7 @@ const MIN_NOTIF_TIME: u64 = 2;
 struct NotifInfo {
     enabled: bool,
     address: String,
+    command: String,
     last_send: u64,
     start_time: u64,
 }
@@ -54,12 +55,16 @@ fn now_secs() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).expect("time").as_secs()
 }
 
-fn send_notif_msg(notifs: &mut NotifInfo, text: &str) {
-    let js = json!({
+fn notification_payload(command: &str, text: &str) -> serde_json::Value {
+    json!({
         "id": "1",
         "method": "slim.request",
-        "params": ["", ["blissmixer", "survey", "act:update", format!("msg:{}", text)]]
-    });
+        "params": ["", [command, "survey", "act:update", format!("msg:{}", text)]]
+    })
+}
+
+fn send_notif_msg(notifs: &mut NotifInfo, text: &str) {
+    let js = notification_payload(&notifs.command, text);
     log::info!("Sending notif to LMS: {}", text);
     let _ = ureq::post(&notifs.address).send_string(&js.to_string());
 }
@@ -413,6 +418,7 @@ fn main() {
     let mut output_path = String::new();
     let mut lms_host = String::from("127.0.0.1");
     let mut lms_json_port: u16 = 9000;
+    let mut lms_command = String::from("blissmixer");
     let mut send_notifs = false;
     let mut logging = String::from("info");
 
@@ -424,6 +430,7 @@ fn main() {
         ap.refer(&mut output_path).add_option(&["-o", "--output"], argparse::Store, "Output path for learned_matrix.json");
         ap.refer(&mut lms_host).add_option(&["-L", "--lms"], argparse::Store, "LMS hostname (default: 127.0.0.1)");
         ap.refer(&mut lms_json_port).add_option(&["-J", "--json"], argparse::Store, "LMS JSON-RPC port (default: 9000)");
+        ap.refer(&mut lms_command).add_option(&["--lms-command"], argparse::Store, "LMS command prefix for notifications (default: blissmixer)");
         ap.refer(&mut send_notifs).add_option(&["-N", "--notifs"], argparse::StoreTrue, "Send progress notifications to LMS");
         ap.refer(&mut logging).add_option(&["-l", "--logging"], argparse::Store, "Log level (default: info)");
         ap.parse_args_or_exit();
@@ -454,10 +461,15 @@ fn main() {
         log::error!("--output is required");
         std::process::exit(1);
     }
+    if lms_command.is_empty() {
+        log::error!("--lms-command must not be empty");
+        std::process::exit(1);
+    }
 
     let mut notifs = NotifInfo {
         enabled: send_notifs,
         address: format!("http://{}:{}/jsonrpc.js", lms_host, lms_json_port),
+        command: lms_command,
         last_send: 0,
         start_time: now_secs(),
     };
@@ -575,5 +587,26 @@ fn main() {
 
     if send_notifs {
         send_notif_msg(&mut notifs, "FINISHED");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::notification_payload;
+
+    #[test]
+    fn notification_command_defaults_can_target_upstream_contract() {
+        let payload = notification_payload("blissmixer", "Loading triplets...");
+        assert_eq!(payload["params"][1][0], "blissmixer");
+        assert_eq!(payload["params"][1][1], "survey");
+        assert_eq!(payload["params"][1][2], "act:update");
+        assert_eq!(payload["params"][1][3], "msg:Loading triplets...");
+    }
+
+    #[test]
+    fn notification_command_can_target_extension_contract() {
+        let payload = notification_payload("blissmixerext", "CV fold 2/5");
+        assert_eq!(payload["params"][1][0], "blissmixerext");
+        assert_eq!(payload["params"][1][3], "msg:CV fold 2/5");
     }
 }
