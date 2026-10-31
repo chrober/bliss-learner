@@ -67,3 +67,9 @@ binaries for x86_64 Linux, ARM64 Linux, ARMHF Linux, universal macOS, and
 Windows, publishes SHA-256 files, and creates or updates the GitHub Release.
 The workflow can also be started manually with `dry_run=true` to build only
 workflow artifacts.
+
+The release workflow builds a source snapshot from its exact Git commit and
+vendors the locked Cargo dependencies. After unpacking, run
+`cargo build --locked --offline` from `source/` with the required Rust and platform build
+tools installed. `SOURCE_MANIFEST.json` lists dependency metadata and available
+notice files; it is not a legal review. Existing releases may predate this step.
