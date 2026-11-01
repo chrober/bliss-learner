@@ -63,6 +63,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.97.1
       - run: cargo test --locked
       - run: python tests/test_source_archive.py
+      - run: python tests/test_dockerfile.py
 
   linux-x86:
     needs: test
