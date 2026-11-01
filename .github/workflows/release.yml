@@ -63,6 +63,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.97.1
       - run: cargo test --locked
       - run: python tests/test_source_archive.py
+      - run: python tests/test_license_bundle.py
       - run: python tests/test_dockerfile.py
 
   linux-x86:
@@ -169,7 +170,9 @@ jobs:
           set -euo pipefail
           mkdir -p source-assets
           python scripts/build_source_archive.py --repo . --commit "$GITHUB_SHA" --output source-assets/bliss-learner-source.tar.gz
+          python scripts/build_license_bundle.py source-assets/bliss-learner-source.tar.gz source-assets/bliss-learner-third-party-licenses.zip
           (cd source-assets && sha256sum bliss-learner-source.tar.gz > bliss-learner-source.tar.gz.sha256)
+          (cd source-assets && sha256sum bliss-learner-third-party-licenses.zip > bliss-learner-third-party-licenses.zip.sha256)
       - uses: actions/upload-artifact@v7
         with:
           name: bliss-learner-source
