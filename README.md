@@ -59,6 +59,11 @@ the crowd-kernel (STE) model described in:
 
 > Tamuz, O., Liu, C., Belongie, S., Shamir, O., & Kalai, A. T. (2011).
 > *Adaptively Learning the Crowd Kernel.* ICML.
+
+Many thanks to Polochon-street for the original project and for giving this
+Rust port [his blessing](https://github.com/Polochon-street/bliss-metric-learning/issues/5#issuecomment-6588394931)
+to be published, modified, and shared under GPLv3!
+
 ## Binary releases
 
 Pushing a semantic version tag such as `v0.1.0` runs
